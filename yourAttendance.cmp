@@ -1,0 +1,55 @@
+<aura:component controller="yourAttendanceController" implements="flexipage:availableForAllPageTypes" access="global" >
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    <aura:attribute name="showOrHide" type="object[]"/> 
+    <aura:attribute name="attendanceString" type="string[]"/> 
+    <aura:if isTrue="{!v.showOrHide[0]}">
+        <article class="slds-card">
+          <div class="slds-card__header slds-grid">
+            <header class="slds-media slds-media_center slds-has-flexi-truncate">
+              <div class="slds-media__figure">
+                <span class="slds-icon_container slds-icon-standard-account" title="account">
+                  <span class="slds-assistive-text">勤怠打刻</span>
+                </span>
+              </div>
+              <div class="slds-media__body">
+                <h2 class="slds-card__header-title">
+                    <span>勤怠打刻</span>
+                </h2>
+              </div>
+            </header>
+          </div>
+          <div class="slds-card__body slds-card__body_inner">
+            	<aura:if isTrue="{! empty(v.attendanceString[0])}"><!--ボタン押したらボタンが消える処理-->
+                  <button class="slds-button slds-button_brand" onclick="{!c.updateAttendance}">{!v.showOrHide[1]}</button>
+                  <aura:unescapedHtml value="{!v.showOrHide[2]}" />
+              </aura:if>
+              <aura:unescapedHtml value="{!v.attendanceString[1]}" />
+              <!-- debug用
+              showOrHide0: {!v.showOrHide[0]}<br />
+              showOrHide1: {!v.showOrHide[1]}<br />
+              showOrHide2: {!v.showOrHide[2]}<br />
+              showOrHide3 empId: {!v.showOrHide[3]}<br />
+              showOrHide4 yearMonth: {!v.showOrHide[4]}<br />
+              showOrHide5 startDate : {!v.showOrHide[5]}<br />
+              showOrHide6 lastModifiedDate: {!v.showOrHide[6]}<br />
+              showOrHide7 stdStartTime: {!v.showOrHide[7]}<br />
+              showOrHide8 stdEndTime: {!v.showOrHide[8]}<br />
+              showOrHide9 empToday: {!v.showOrHide[9]}<br />
+              {!v.attendanceString[0]}<br />
+              {!v.attendanceString[1]}<br />
+              {!v.attendanceString[2]}<br />
+              {!v.attendanceString[3]}<br />
+              {!v.attendanceString[4]}<br />
+              {!v.attendanceString[5]}<br />
+              {!v.attendanceString[6]}<br />
+              {!v.attendanceString[7]}<br />
+              {!v.attendanceString[8]}<br />
+              {!v.attendanceString[9]}<br />
+              {!v.attendanceString[10]}<br />
+				-->
+          </div>
+        </article>
+    </aura:if>
+
+
+</aura:component>
