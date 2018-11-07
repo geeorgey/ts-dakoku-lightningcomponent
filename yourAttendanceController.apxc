@@ -1,0 +1,274 @@
+public class yourAttendanceController {
+    //初期データから表示非表示を判定する
+	@AuraEnabled
+    public static LIST<object> isSetMyAttendance() {
+        //初期データの取得
+        loadDataResponseData ld = loadData() ;
+        //初期データの配置
+        List<teamspirit__AtkEmpDay__c> empDays = ld.empDays;//勤怠日次リスト
+        String empId = ld.empId;
+        Integer yearMonth = ld.yearMonth;
+        String startDate = ld.startDate;
+        String lastModifiedDate = ld.lastModifiedDate;
+        Integer stdStartTime = ld.stdStartTime;
+        Integer stdEndTime = ld.stdEndTime;
+        teamspirit__AtkEmpDay__c empToday = ld.empToday; //今日の勤怠日次   
+        Map<String, Object> lastData = ld.lastData;
+        //初期データのここまで
+
+        //本日の状況を取得
+	TimeTableResponse res = new TimeTableResponse();
+        timeTableResponseData ttrd = new timeTableResponseData();
+        //本日の状況を取得
+        List<Map<String, Integer>> timeTable = new List<Map<String, Integer>>();
+        ttrd = getTimeTable(res,empToday,timeTable);        
+        res.timeTable = timeTable;
+        system.debug('タイムテーブルはとれているか ' + timeTable);
+        //取れてた：13:27:32:491 USER_DEBUG [50]|DEBUG|タイムテーブルはとれているか ({from=null, to=null, type=1})
+
+        system.debug('レス' + res );
+		//18:31:38:491 USER_DEBUG [46]|DEBUG|res TimeTableResponse:[isHoliday=false, timeTable=({from=540, to=1080, type=1}, {from=690, to=780, type=21})] 出退勤両方ある
+		//18:33:06:540 USER_DEBUG [46]|DEBUG|res TimeTableResponse:[isHoliday=false, timeTable=({from=null, to=null, type=1})] 出退勤両方無い
+		//18:33:50:547 USER_DEBUG [46]|DEBUG|res TimeTableResponse:[isHoliday=false, timeTable=({from=540, to=null, type=1}, {from=690, to=780, type=21})] 出勤だけある
+		//18:34:29:491 USER_DEBUG [46]|DEBUG|res TimeTableResponse:[isHoliday=false, timeTable=({from=540, to=1065, type=1}, {from=690, to=780, type=21})]
+		//18:36:25:629 USER_DEBUG [46]|DEBUG|res TimeTableResponse:[isHoliday=false, timeTable=({from=480, to=null, type=1}, {from=690, to=780, type=21})] 8時出勤のみ
+		//18:37:24:551 USER_DEBUG [46]|DEBUG|res TimeTableResponse:[isHoliday=false, timeTable=({from=480, to=1200, type=1}, {from=690, to=780, type=21})] 8時出勤20時退社
+		//18:38:40:491 USER_DEBUG [46]|DEBUG|res TimeTableResponse:[isHoliday=false, timeTable=({from=660, to=null, type=1}, {from=690, to=780, type=21})] 11時出社のみ
+		// timeTable[1]は裁量労働の基本労働時間だと思う。設定してあると変化しない
+		system.debug('レスres.get(timeTable) ' + res.timeTable);        
+		system.debug('res.get(timeTable)from ' + res.timeTable[0].get('from'));
+        //出退勤両方無い場合は res.timeTable == NULL
+        //出勤だけある場合は  res.timeTable[0].get('from') != NULL && res.timeTable[0].get('to') == NULL
+        //両方ある場合は res.timeTable[0].get('from') != NULL && res.timeTable[0].get('to') != NULL
+        
+        //現在時刻の取得
+        Datetime now = Datetime.now();
+        Integer nowHour = now.hour();
+
+        //カードの出力
+        LIST<object> showOrHide = new LIST<object>();
+        //showOrHide[0]の設定ここから：card全体の表示非表示の切り替え
+        if(nowHour<=15){// 〜15:59
+            if(res.timeTable[0].get('from') != NULL){// 〜15:59で出勤打刻がある場合
+                showOrHide.add('false');//cardを消す
+            }else{
+                showOrHide.add('true');//cardを表示
+            }
+        }else{// 15:59〜
+            if(res.timeTable[0].get('to') != NULL){// 15:59〜で退勤打刻がある場合
+                showOrHide.add('false');//cardを消す
+            }else{
+                showOrHide.add('true');//cardを表示
+            }
+        }
+        //showOrHide[0]の設定ここまで
+        
+        //showOrHide[1]と[2]の設定ここから
+        //ボタンの表示文言
+        if(nowHour<=15){//〜15:59
+            showOrHide.add('出勤打刻する');
+        }else{
+            if(res.timeTable[0].get('from') != NULL){// 〜15:59で出勤打刻がある場合
+                showOrHide.add('退勤打刻する');       
+                showOrHide.add('');//showOrHide[2]
+            }else{
+                showOrHide.add('退勤打刻する');
+                showOrHide.add('<p class="slds-text-color_error">出社打刻がありませんでした。明日はよろしくおねがいします。</p>');//showOrHide[2]
+            }
+        } 
+        //showOrHide[1]の設定ここまで
+
+        //debug用
+        showOrHide.add(empId);
+        showOrHide.add(yearMonth);
+        showOrHide.add(startDate);
+        showOrHide.add(lastModifiedDate);
+        showOrHide.add(stdStartTime);
+        showOrHide.add(stdEndTime);
+        showOrHide.add(empToday);
+	//debug用
+
+        return showOrHide;        
+    }
+
+    public class TimeTableResponse {
+        public List<Map<String, Integer>> timeTable;
+        public Boolean isHoliday;
+    }
+                    
+    //打刻処理は時間帯によって出勤or退勤が自動で決まる(teamspirit側の設定に順ずる)
+    @AuraEnabled
+    public static LIST<String> getInsertAttendance() {
+        //初期データの取得
+        loadDataResponseData ld = loadData() ;
+        //初期データの配置
+        List<teamspirit__AtkEmpDay__c> empDays = ld.empDays;//勤怠日次リスト
+        String empId = ld.empId;
+        Integer yearMonth = ld.yearMonth;
+        String startDate = ld.startDate;
+        String lastModifiedDate = ld.lastModifiedDate;
+        Integer stdStartTime = ld.stdStartTime;
+        Integer stdEndTime = ld.stdEndTime;
+        teamspirit__AtkEmpDay__c empToday = ld.empToday; //今日の勤怠日次   
+        Map<String, Object> lastData = ld.lastData;
+        //初期データのここまで
+        
+        //getTimeTable タイムテーブルを取得する
+        timeTableResponseData ttrd = new timeTableResponseData();
+		TimeTableResponse resTmp = new TimeTableResponse();
+        List<Map<String, Integer>> timeTable = new List<Map<String, Integer>>();
+        ttrd = getTimeTable(resTmp,empToday,timeTable); 
+		
+        //結果出力用
+        LIST<String> insertAttendance = new LIST<String>();
+
+        //inputTimeTable
+        Map<String, Object> params = getBaseParams( empId, yearMonth, startDate,lastModifiedDate);
+
+        //setAttendance
+        DateTime now = DateTime.now();
+        Integer timeHM = now.hour() * 60 + now.minute();
+        Map<String, Object> input = new Map<String, Object>{'comment' => '', 'time' => timeHM, 'face' => 1, 'fix' => false, 'type' => 10};
+        params.put('input', input);
+        params.put('prevFlag', false);
+        params.put('stdStartTime', stdStartTime);
+        params.put('stdEndTime', stdEndTime);
+        String jsonReqSetAttendance = JSON.serialize(params);
+        system.debug('jsonReqSetAttendance ' + jsonReqSetAttendance);
+        Map<String, Object> resSetAttendance = teamspirit.RtkPotalCtl.inputTime(jsonReqSetAttendance);
+        lastModifiedDate = String.valueOf(resSetAttendance.get('lastModifiedDate'));
+        //現在時刻の取得
+        Integer nowHour = now.hour();
+        
+        if(resSetAttendance.get('result') == 'OK'){
+            insertAttendance.add('false');//cardの非表示
+	        if(nowHour<=15){//〜15:59
+            	insertAttendance.add('<p class="slds-text-color_success">👍出勤登録が完了しました👍</p>');
+            }else{
+            	insertAttendance.add('<p class="slds-text-color_success">😀😌退勤登録が完了しました👍<br />今日も一日お疲れ様でした！🍻</p>');                
+            }
+        }else{
+            insertAttendance.add('false');//cardの非表示
+	        if(nowHour<=15){//〜15:59
+            	insertAttendance.add('<p class="slds-text-color_error">😱😱出勤登録が失敗しました。Georgeまでお知らせください' + resSetAttendance + '</p>');
+            }else{
+            	insertAttendance.add('<p class="slds-text-color_error">😱😱退勤登録が失敗しました。Georgeまでお知らせください' + resSetAttendance + '</p>');                
+            }
+        }
+        //setAttendanceここまで
+        return insertAttendance;
+    }
+
+    //loadDataで返ってくるデータを入れる
+    public class loadDataResponseData {
+        public Map<String, Object> lastData;
+        public List<teamspirit__AtkEmpDay__c> empDays;
+        public String empId;
+        public Integer yearMonth;
+        public String startDate;
+        public String lastModifiedDate;
+        public Integer stdStartTime;
+        public Integer stdEndTime;
+        public teamspirit__AtkEmpDay__c empToday;
+    }
+    
+    //初期データ取得
+    @AuraEnabled
+    public static loadDataResponseData loadData() {
+        loadDataResponseData res = new loadDataResponseData();
+		res.lastData = teamspirit.RtkPotalCtl.getLastModifiedDate();//自分の最終更新データが取得できる模様
+        res.empId = (String) res.lastData.get('empId');//社員IDを取得
+        res.lastModifiedDate = String.valueOf(res.lastData.get('lastModifiedDate'));//最終更新日を取得
+        Map<String, Object> empMonth = teamspirit.RtkPotalCtl.loadEmpMonth('');//当月のデータの取得？
+        List<teamspirit__AtkConfig__c > configs = (List<teamspirit__AtkConfig__c>) empMonth.get('configs');//empMonthの中にいろんなデータが入っている模様。configを取ってくる
+        teamspirit__AtkConfig__c config = configs != null && configs.size() > 0 ? configs[0] : null;
+        if (config != null) {
+            res.stdStartTime = Integer.valueOf(config.teamspirit__StdStartTime__c);
+            res.stdEndTime = Integer.valueOf(config.teamspirit__StdEndTime__c);
+        }
+        res.empDays = (List<teamspirit__AtkEmpDay__c>) empMonth.get('empDays');//勤怠日次のリストがempDaysでマップされて入っている模様
+        if (res.empDays == null) {//empDaysが未作成だった場合は作成するっぽい
+            res.empDays = new List<teamspirit__AtkEmpDay__c>();
+        }
+        Date today = getToday();
+        for (teamspirit__AtkEmpDay__c day: res.empDays) {
+            if (day.teamspirit__Date__c == today) {//今日判定をして今日の日付が出たらempTodayをdayに入れてbreak
+                res.empToday = day;
+                break;
+            }
+        }
+        res.yearMonth = (Integer) empMonth.get('yearMonth');
+        res.startDate = (String) empMonth.get('startDate');
+        
+        return res;
+    }
+
+
+    //loadDataで返ってくるデータを入れる
+    public class timeTableResponseData {
+        public TimeTableResponse ttr;
+        public List<Map<String, Integer>> timeTable;
+    }
+
+    //TimeTableのデータを取得する
+    public static timeTableResponseData getTimeTable(TimeTableResponse res,teamspirit__AtkEmpDay__c empToday,List<Map<String, Integer>> timeTable) { //勤怠日次>時間配分の取得
+        timeTableResponseData ttrd = new timeTableResponseData();
+        res.isHoliday = isHoliday(empToday);
+        res.timeTable = timeTable;
+        if (empToday == null) {
+            ttrd.ttr = res;
+            return ttrd;
+        }
+
+        Map<String, Integer> item = new Map<String, Integer>();
+        item.put('from', Integer.valueOf(empToday.teamspirit__StartTime__c));
+        item.put('to', Integer.valueOf(empToday.teamspirit__EndTime__c));
+        item.put('type', 1);
+        timeTable.add(item);
+
+        List<String> timeTableStrItems = (empToday.teamspirit__TimeTable__c == null ? '' : empToday.teamspirit__TimeTable__c).split(':');
+        for (String timeTableStr: timeTableStrItems) {
+            if(timeTableStr == '') {
+                continue;
+            }
+            item = new Map<String, Integer>{};
+
+                String str = timeTableStr.substring(0, 4);
+            str = timeTableStr.substring(0, 4);
+            if (str != '----') {
+                item.put('from', Integer.valueOf(str));
+            }
+            str = timeTableStr.substring(4, 8);
+            if (str != '----') {
+                item.put('to', Integer.valueOf(str));
+            }
+            str = timeTableStr.substring(8, 10);
+            item.put('type', Integer.valueOf(str));
+
+            timeTable.add(item);
+        }
+
+        ttrd.ttr = res;
+        ttrd.timeTable= timeTable;
+        return ttrd;
+    }    
+
+
+    private static Date getToday() {
+        return Date.today();
+    }
+
+    public static Boolean isHoliday(teamspirit__AtkEmpDay__c empToday) {
+        return empToday != null && empToday.teamspirit__DayType__c != null && Integer.valueOf(empToday.teamspirit__DayType__c) > 0 && empToday.teamspirit__HolidayWorkApplyId__c == null;
+    }
+
+    private static Map<String, Object>getBaseParams(String empId,Integer yearMonth,String startDate,String lastModifiedDate) {
+        Map<String, Object> params = new Map<String, Object>();
+        params.put('empId', empId);
+        params.put('month', yearMonth);
+        params.put('startDate', startDate);
+        params.put('lastModifiedDate', lastModifiedDate);
+        params.put('date', DateTime.newInstance(getToday(), Time.newInstance(0, 0, 0, 0)).format('yyyy-MM-dd'));
+        return params;
+    }
+}
