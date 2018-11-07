@@ -1,0 +1,8 @@
+@isTest
+public class yourAttendanceControllerTest {
+    @isTest(Seealldata=true)
+	static void testMethod1() {
+        yourAttendanceController.isSetMyAttendance();
+        yourAttendanceController.getInsertAttendance();
+    }
+}
