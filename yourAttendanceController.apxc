@@ -17,7 +17,7 @@ public class yourAttendanceController {
         //初期データのここまで
 
         //本日の状況を取得
-	TimeTableResponse res = new TimeTableResponse();
+		TimeTableResponse res = new TimeTableResponse();
         timeTableResponseData ttrd = new timeTableResponseData();
         //本日の状況を取得
         List<Map<String, Integer>> timeTable = new List<Map<String, Integer>>();
@@ -45,7 +45,11 @@ public class yourAttendanceController {
         Datetime now = Datetime.now();
         Integer nowHour = now.hour();
 
+        
+
         //カードの出力
+        //両方ある場合は非表示にする
+
         LIST<object> showOrHide = new LIST<object>();
         //showOrHide[0]の設定ここから：card全体の表示非表示の切り替え
         if(nowHour<=15){// 〜15:59
@@ -67,6 +71,7 @@ public class yourAttendanceController {
         //ボタンの表示文言
         if(nowHour<=15){//〜15:59
             showOrHide.add('出勤打刻する');
+            showOrHide.add('');//showOrHide[2] 朝は非表示
         }else{
             if(res.timeTable[0].get('from') != NULL){// 〜15:59で出勤打刻がある場合
                 showOrHide.add('退勤打刻する');       
@@ -86,7 +91,7 @@ public class yourAttendanceController {
         showOrHide.add(stdStartTime);
         showOrHide.add(stdEndTime);
         showOrHide.add(empToday);
-	//debug用
+		//debug用
 
         return showOrHide;        
     }
@@ -96,8 +101,8 @@ public class yourAttendanceController {
         public Boolean isHoliday;
     }
                     
-    //打刻処理は時間帯によって出勤or退勤が自動で決まる(teamspirit側の設定に順ずる)
-    @AuraEnabled
+    //出勤打刻
+	@AuraEnabled
     public static LIST<String> getInsertAttendance() {
         //初期データの取得
         loadDataResponseData ld = loadData() ;
@@ -124,6 +129,7 @@ public class yourAttendanceController {
 
         //inputTimeTable
         Map<String, Object> params = getBaseParams( empId, yearMonth, startDate,lastModifiedDate);
+		//inputTimeTable
 
         //setAttendance
         DateTime now = DateTime.now();
@@ -158,6 +164,8 @@ public class yourAttendanceController {
         //setAttendanceここまで
         return insertAttendance;
     }
+
+    //https://github.com/ngs/ts-dakoku/blob/master/apex/src/classes/TSTimeTableAPIController.cls
 
     //loadDataで返ってくるデータを入れる
     public class loadDataResponseData {
@@ -254,6 +262,7 @@ public class yourAttendanceController {
     }    
 
 
+    
     private static Date getToday() {
         return Date.today();
     }
