@@ -71,7 +71,7 @@ public class yourAttendanceController {
         //ボタンの表示文言
         if(nowHour<=15){//〜15:59
             showOrHide.add('出勤打刻する');
-            showOrHide.add('');//showOrHide[2] 朝は非表示
+            showOrHide.add('');//showOrHide[2]
         }else{
             if(res.timeTable[0].get('from') != NULL){// 〜15:59で出勤打刻がある場合
                 showOrHide.add('退勤打刻する');       
@@ -131,10 +131,21 @@ public class yourAttendanceController {
         Map<String, Object> params = getBaseParams( empId, yearMonth, startDate,lastModifiedDate);
 		//inputTimeTable
 
+
         //setAttendance
         DateTime now = DateTime.now();
         Integer timeHM = now.hour() * 60 + now.minute();
-        Map<String, Object> input = new Map<String, Object>{'comment' => '', 'time' => timeHM, 'face' => 1, 'fix' => false, 'type' => 10};
+        //出勤 or 退勤
+        //現在時刻の取得
+        Integer nowHour = now.hour();
+        Integer attendance;
+        if(nowHour<=15){//〜15:59
+            attendance = 0;
+        }else{
+            attendance = 1;
+        }
+
+        Map<String, Object> input = new Map<String, Object>{'comment' => '', 'time' => timeHM, 'face' => attendance, 'fix' => false, 'type' => 10};
         params.put('input', input);
         params.put('prevFlag', false);
         params.put('stdStartTime', stdStartTime);
@@ -143,8 +154,6 @@ public class yourAttendanceController {
         system.debug('jsonReqSetAttendance ' + jsonReqSetAttendance);
         Map<String, Object> resSetAttendance = teamspirit.RtkPotalCtl.inputTime(jsonReqSetAttendance);
         lastModifiedDate = String.valueOf(resSetAttendance.get('lastModifiedDate'));
-        //現在時刻の取得
-        Integer nowHour = now.hour();
         
         if(resSetAttendance.get('result') == 'OK'){
             insertAttendance.add('false');//cardの非表示
